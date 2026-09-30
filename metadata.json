@@ -1,0 +1,6 @@
+{
+  "name": "MindAvatar SaaS - Zero-Cost AI Avatar Platform",
+  "description": "Multi-tenant SaaS platform for meditation & mindfulness experts with AI Avatars powered by local RAG, Edge-TTS, and OpenRouter.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

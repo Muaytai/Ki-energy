@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Ensure window.fetch has both getter and setter so that iframe interceptors or extensions don't throw TypeError
+      (function() {
+        try {
+          var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+          var _currentFetch = nativeFetch;
+          try {
+            Object.defineProperty(window, 'fetch', {
+              get: function() { return _currentFetch; },
+              set: function(fn) { _currentFetch = fn; },
+              configurable: true,
+              enumerable: true
+            });
+          } catch (e1) {
+            if (typeof Window !== 'undefined' && Window.prototype) {
+              Object.defineProperty(Window.prototype, 'fetch', {
+                get: function() { return _currentFetch; },
+                set: function(fn) { _currentFetch = fn; },
+                configurable: true,
+                enumerable: true
+              });
+            }
+          }
+        } catch (err) {
+          // Graceful fallback
+        }
+      })();
+    </script>
+    <title>MindAvatar SaaS - Zero-Cost AI Avatar Platform</title>
+    <meta name="description" content="Multi-tenant SaaS platform for meditation & mindfulness experts with AI Avatars powered by local RAG, Edge-TTS, and OpenRouter." />
+    <meta property="og:title" content="MindAvatar SaaS - Zero-Cost AI Avatar Platform" />
+    <meta property="og:description" content="Multi-tenant SaaS platform for meditation & mindfulness experts with AI Avatars powered by local RAG, Edge-TTS, and OpenRouter." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

@@ -1,0 +1,151 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: mindavatar_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mindavatar_db}
+      POSTGRES_USER: ${POSTGRES_USER:-mindavatar_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mindavatar_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mindavatar_user} -d ${POSTGRES_DB:-mindavatar_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mindavatar_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: mindavatar_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mindavatar_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindavatar_backend
+    restart: unless-stopped
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - huggingface_cache:/root/.cache/huggingface
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=${DJANGO_SECRET_KEY:-mindavatar-insecure-dev-key-change-in-prod}
+      - POSTGRES_DB=${POSTGRES_DB:-mindavatar_db}
+      - POSTGRES_USER=${POSTGRES_USER:-mindavatar_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mindavatar_password}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-meta-llama/llama-3.3-70b-instruct:free}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-paraphrase-multilingual-MiniLM-L12-v2}
+      - DEFAULT_TTS_VOICE=${DEFAULT_TTS_VOICE:-ru-RU-DmitryNeural}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mindavatar_net
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindavatar_celery_worker
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=info --concurrency=2
+    volumes:
+      - ./backend:/app
+      - huggingface_cache:/root/.cache/huggingface
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-mindavatar_db}
+      - POSTGRES_USER=${POSTGRES_USER:-mindavatar_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mindavatar_password}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-meta-llama/llama-3.3-70b-instruct:free}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-paraphrase-multilingual-MiniLM-L12-v2}
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - mindavatar_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mindavatar_frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
+    networks:
+      - mindavatar_net
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: mindavatar_bot
+    restart: unless-stopped
+    command: python main.py
+    volumes:
+      - ./bot:/app
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - BACKEND_API_URL=http://backend:8000/api
+      - REDIS_URL=redis://redis:6379/1
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - mindavatar_net
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  huggingface_cache:
+    driver: local
+
+networks:
+  mindavatar_net:
+    driver: bridge
